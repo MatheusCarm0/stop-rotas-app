@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "stoprotas",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "android": {
       "package": "com.stoppanfletos.rotas",
       "permissions": [
