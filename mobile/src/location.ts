@@ -43,9 +43,9 @@ export async function startTracking() {
   const already = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false);
   if (already) return;
   await Location.startLocationUpdatesAsync(LOCATION_TASK, {
-    accuracy: Location.Accuracy.High,
-    timeInterval: 5000,
-    distanceInterval: 10,
+    accuracy: Location.Accuracy.BestForNavigation,
+    timeInterval: 3000,
+    distanceInterval: 4,
     showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: false,
     foregroundService: {

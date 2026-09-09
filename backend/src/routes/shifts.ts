@@ -115,11 +115,11 @@ shiftsRouter.post("/:id/locations", requireAuth, async (req, res) => {
   let movingFlag: boolean;
   const spanS = (new Date(last.recorded_at).getTime() - new Date(first.recorded_at).getTime()) / 1000;
   if (pts.length >= 2 && spanS > 0) {
-    movingFlag = added / spanS > 0.4; // acima de ~1,4 km/h = andando
+    movingFlag = added / spanS > 0.3; // acima de ~1 km/h = andando
   } else if (shift.last_lat != null && shift.last_lng != null) {
-    movingFlag = haversine(shift.last_lat, shift.last_lng, last.lat, last.lng) > 5;
+    movingFlag = haversine(shift.last_lat, shift.last_lng, last.lat, last.lng) > 3;
   } else {
-    movingFlag = added > 5;
+    movingFlag = added > 3;
   }
   // tempo em movimento (para o ritmo REAL, sem contar as paradas)
   const addMoving = movingFlag ? Math.min(spanS > 0 ? spanS : 5, 60) : 0;

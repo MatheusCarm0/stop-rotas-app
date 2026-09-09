@@ -71,9 +71,10 @@ export default function Relatorios() {
           <View style={s.bars}>
             {daily.map((d) => {
               const km = Number(d.distance_m) / 1000;
+              const label = km >= 1 ? km.toFixed(1) : km >= 0.01 ? km.toFixed(2) : "0";
               return (
                 <View key={String(d.day)} style={s.barCol}>
-                  <Text style={s.barVal}>{km >= 0.1 ? km.toFixed(1) : ""}</Text>
+                  <Text style={s.barVal}>{label}</Text>
                   <View style={[s.bar, { height: Math.max(3, (Number(d.distance_m) / maxDaily) * 120) }]} />
                   <Text style={s.barLbl}>{fmtDay(d.day)}</Text>
                 </View>

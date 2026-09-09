@@ -20,6 +20,7 @@ export default function Worker() {
   const [elapsed, setElapsed] = useState(0);
   const [movingTime, setMovingTime] = useState(0);
   const [moving, setMoving] = useState(false);
+  const [liveSpeed, setLiveSpeed] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const startRef = useRef<number>(0);
@@ -55,7 +56,7 @@ export default function Worker() {
       }, 1000);
     }
     watchRef.current = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 8 },
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1500, distanceInterval: 1 },
       (loc) => {
         const p: Pt = { lat: loc.coords.latitude, lng: loc.coords.longitude };
         const now = Date.now();
@@ -63,17 +64,21 @@ export default function Worker() {
           const d = haversine(lastRef.current.p.lat, lastRef.current.p.lng, p.lat, p.lng);
           const dt = (now - lastRef.current.t) / 1000;
           if (d < 500) setDistance((prev) => prev + d);
-          if (dt > 0 && d / dt > 0.4) {
-            // andando: acumula tempo em movimento (para o ritmo REAL)
+          const segSpeed = dt > 0 ? d / dt : 0; // m/s
+          const gpsSpeed = loc.coords.speed && loc.coords.speed > 0 ? loc.coords.speed : 0;
+          const spd = Math.max(segSpeed, gpsSpeed);
+          if (spd > 0.3 && d > 1) {
+            // andando: acumula tempo em movimento (ritmo REAL) + velocidade ao vivo
             movingRef.current += dt;
             setMovingTime(movingRef.current);
             setMoving(true);
+            setLiveSpeed(spd * 3.6);
             if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
-            moveTimeoutRef.current = setTimeout(() => setMoving(false), 12000);
+            moveTimeoutRef.current = setTimeout(() => { setMoving(false); setLiveSpeed(0); }, 8000);
           }
         }
         lastRef.current = { p, t: now };
-        setPoints((prev) => (prev.length > 2000 ? [...prev.slice(1), p] : [...prev, p]));
+        setPoints((prev) => (prev.length > 3000 ? [...prev.slice(1), p] : [...prev, p]));
       }
     );
   }
@@ -92,7 +97,7 @@ export default function Worker() {
       const shift = await api.startShift();
       await setActiveShift(shift.id);
       setShiftId(shift.id);
-      setPoints([]); setDistance(0); setMovingTime(0); movingRef.current = 0; lastRef.current = null;
+      setPoints([]); setDistance(0); setMovingTime(0); setLiveSpeed(0); movingRef.current = 0; lastRef.current = null;
       startRef.current = Date.now();
       await startTracking();
       await beginForeground();
@@ -136,8 +141,6 @@ export default function Worker() {
     router.replace("/");
   }
 
-  const speedKmh = elapsed > 5 ? (distance / 1000) / (elapsed / 3600) : 0;
-
   if (!shiftId) {
     return (
       <View style={[s.c, { padding: 24, justifyContent: "center" }]}>
@@ -175,7 +178,7 @@ export default function Worker() {
         <Stat s={s} c={c} label="Distância" value={fmtKm(distance)} unit="km" accent />
         <Stat s={s} c={c} label="Tempo total" value={fmtTime(elapsed)} />
         <Stat s={s} c={c} label="Ritmo (andando)" value={fmtPace(distance, movingTime)} unit="/km" />
-        <Stat s={s} c={c} label="Vel. média" value={speedKmh.toFixed(1)} unit="km/h" />
+        <Stat s={s} c={c} label="Velocidade" value={liveSpeed.toFixed(1)} unit="km/h" />
       </View>
 
       <TouchableOpacity style={s.btnStop} onPress={onEnd} disabled={busy}>
