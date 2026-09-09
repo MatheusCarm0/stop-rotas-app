@@ -21,20 +21,36 @@ export default function Worker() {
   const [movingTime, setMovingTime] = useState(0);
   const [moving, setMoving] = useState(false);
   const [liveSpeed, setLiveSpeed] = useState(0);
+  const [bgOn, setBgOn] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const startRef = useRef<number>(0);
   const lastRef = useRef<{ p: Pt; t: number } | null>(null);
   const movingRef = useRef(0);
+  const shiftIdRef = useRef<number | null>(null);
+  const bufRef = useRef<{ lat: number; lng: number; speed: number | null; moving: boolean; recorded_at: string }[]>([]);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const senderRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const moveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function flushBuffer() {
+    const id = shiftIdRef.current;
+    if (!id || bufRef.current.length === 0) return;
+    const batch = bufRef.current.splice(0, bufRef.current.length);
+    try {
+      await api.postLocations(id, batch);
+    } catch {
+      bufRef.current.unshift(...batch); // devolve para tentar de novo
+    }
+  }
 
   useEffect(() => {
     (async () => {
       const existing = await getActiveShift();
       if (existing) {
         setShiftId(existing);
+        shiftIdRef.current = existing;
         startRef.current = Date.now();
         beginForeground();
       }
@@ -46,6 +62,7 @@ export default function Worker() {
     watchRef.current?.remove();
     watchRef.current = null;
     if (timerRef.current) clearInterval(timerRef.current);
+    if (senderRef.current) clearInterval(senderRef.current);
     if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
   }
 
@@ -55,20 +72,26 @@ export default function Worker() {
         setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
       }, 1000);
     }
+    // envia os pontos ao servidor a cada 4s (faz o painel do admin atualizar
+    // mesmo no Expo Go, onde o segundo plano não roda)
+    if (!senderRef.current) {
+      senderRef.current = setInterval(flushBuffer, 4000);
+    }
     watchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1500, distanceInterval: 1 },
       (loc) => {
         const p: Pt = { lat: loc.coords.latitude, lng: loc.coords.longitude };
         const now = Date.now();
+        const gpsSpeed = loc.coords.speed && loc.coords.speed > 0 ? loc.coords.speed : 0;
+        let mv = false;
         if (lastRef.current) {
           const d = haversine(lastRef.current.p.lat, lastRef.current.p.lng, p.lat, p.lng);
           const dt = (now - lastRef.current.t) / 1000;
           if (d < 500) setDistance((prev) => prev + d);
           const segSpeed = dt > 0 ? d / dt : 0; // m/s
-          const gpsSpeed = loc.coords.speed && loc.coords.speed > 0 ? loc.coords.speed : 0;
           const spd = Math.max(segSpeed, gpsSpeed);
           if (spd > 0.3 && d > 1) {
-            // andando: acumula tempo em movimento (ritmo REAL) + velocidade ao vivo
+            mv = true;
             movingRef.current += dt;
             setMovingTime(movingRef.current);
             setMoving(true);
@@ -79,6 +102,7 @@ export default function Worker() {
         }
         lastRef.current = { p, t: now };
         setPoints((prev) => (prev.length > 3000 ? [...prev.slice(1), p] : [...prev, p]));
+        bufRef.current.push({ lat: p.lat, lng: p.lng, speed: gpsSpeed || null, moving: mv, recorded_at: new Date(now).toISOString() });
       }
     );
   }
@@ -97,9 +121,12 @@ export default function Worker() {
       const shift = await api.startShift();
       await setActiveShift(shift.id);
       setShiftId(shift.id);
+      shiftIdRef.current = shift.id;
+      bufRef.current = [];
       setPoints([]); setDistance(0); setMovingTime(0); setLiveSpeed(0); movingRef.current = 0; lastRef.current = null;
       startRef.current = Date.now();
-      await startTracking();
+      const bg = await startTracking(); // false no Expo Go
+      setBgOn(bg);
       await beginForeground();
     } catch (e: any) {
       Alert.alert("Erro", e.message || "Não foi possível iniciar");
@@ -117,12 +144,14 @@ export default function Worker() {
         onPress: async () => {
           setBusy(true);
           try {
+            await flushBuffer(); // envia os últimos pontos
             cleanup();
             await stopTracking();
             const id = shiftId;
             await api.endShift(id);
             await setActiveShift(null);
             setShiftId(null);
+            shiftIdRef.current = null;
             router.replace({ pathname: "/summary", params: { shiftId: String(id) } });
           } catch (e: any) {
             Alert.alert("Erro", e.message || "Falha ao encerrar");
@@ -170,6 +199,14 @@ export default function Worker() {
         <TouchableOpacity onPress={onLogout}><Text style={{ color: c.muted }}>Sair</Text></TouchableOpacity>
       </View>
 
+      {!bgOn && (
+        <View style={s.banner}>
+          <Text style={s.bannerTxt}>
+            Modo Expo Go: mantenha o app aberto durante o expediente. O rastreamento com a tela bloqueada exige o APK.
+          </Text>
+        </View>
+      )}
+
       <View style={{ marginTop: 14 }}>
         <LiveMap points={points} follow height={320} color={c.red} dark={c.mapDark} />
       </View>
@@ -214,6 +251,8 @@ const makeStyles = (c: Palette) =>
     pill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, gap: 6 },
     pip: { width: 8, height: 8, borderRadius: 4 },
     pillTxt: { fontWeight: "800", fontSize: 12, letterSpacing: 0.5, textTransform: "uppercase" },
+    banner: { marginTop: 12, backgroundColor: c.panel, borderWidth: 1, borderColor: c.amber, borderRadius: 10, padding: 12 },
+    bannerTxt: { color: c.amber, fontSize: 12.5, fontWeight: "600", lineHeight: 17 },
     stats: { flexDirection: "row", flexWrap: "wrap", marginTop: 14, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: c.line },
     stat: { width: "50%", backgroundColor: c.panel, padding: 16, borderWidth: 0.5, borderColor: c.line },
     statK: { color: c.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },

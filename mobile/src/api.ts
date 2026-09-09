@@ -30,6 +30,10 @@ export const api = {
 
   startShift: () => request<any>("/shifts/start", { method: "POST" }),
   endShift: (id: number) => request<any>(`/shifts/${id}/end`, { method: "POST" }),
+  postLocations: (
+    id: number,
+    points: { lat: number; lng: number; speed?: number | null; moving?: boolean; recorded_at: string }[]
+  ) => request<any>(`/shifts/${id}/locations`, { method: "POST", body: JSON.stringify({ points }) }),
   getShift: (id: number) => request<any>(`/shifts/${id}`),
   addDelivery: (id: number, body: { lat?: number | null; lng?: number | null; note?: string | null }) =>
     request<any>(`/shifts/${id}/deliveries`, { method: "POST", body: JSON.stringify(body) }),
