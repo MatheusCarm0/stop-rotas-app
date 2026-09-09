@@ -1,5 +1,7 @@
 import mysql from "mysql2/promise";
+import { readFileSync } from "node:fs";
 import { config } from "./config.js";
+import { seedUsers } from "./seedData.js";
 
 export const pool = mysql.createPool({
   host: config.db.host,
@@ -12,6 +14,27 @@ export const pool = mysql.createPool({
   queueLimit: 0,
   timezone: "Z",
 });
+
+/** Cria as tabelas a partir do schema.sql (idempotente — CREATE TABLE IF NOT EXISTS).
+ *  Necessário em bancos gerenciados (Railway etc.), onde o init do container não roda. */
+export async function ensureSchema(): Promise<void> {
+  const raw = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
+  const cleaned = raw
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("--"))
+    .join("\n");
+  const statements = cleaned.split(";").map((s) => s.trim()).filter(Boolean);
+  for (const st of statements) await pool.query(st);
+  console.log(`[db] schema garantido (${statements.length} tabelas/objetos)`);
+}
+
+/** Cria os usuários padrão só se o banco estiver vazio (admin/admin123). */
+export async function seedIfEmpty(): Promise<void> {
+  const [rows] = await pool.query("SELECT COUNT(*) AS c FROM employees");
+  if ((rows as any[])[0].c > 0) return;
+  await seedUsers(pool);
+  console.log("[db] usuários padrão criados (admin/admin123) — TROQUE a senha após o 1º login");
+}
 
 /** Migrações idempotentes (MySQL não tem ADD COLUMN IF NOT EXISTS). */
 export async function migrate(): Promise<void> {

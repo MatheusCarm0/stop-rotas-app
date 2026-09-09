@@ -74,14 +74,63 @@ eas build -p android --profile preview
 
 ---
 
-## Alternativa ao VPS: Railway / Render (sem servidor próprio)
+## ⭐ Caminho recomendado para testes: Railway (sem servidor próprio, sem domínio)
 
-- **Backend:** crie um serviço a partir deste repositório apontando para a pasta `backend/`
-  (build por Docker). Defina as variáveis `DB_*`, `JWT_SECRET`, `PORT=4000`.
-- **MySQL:** use um banco gerenciado (Railway MySQL, PlanetScale, Aiven…) e preencha os `DB_*`.
-- Rode o seed uma vez (`npm run seed`) pelo console do serviço.
-- A plataforma já entrega **HTTPS** num domínio `*.up.railway.app` / `*.onrender.com` —
-  use essa URL no `EXPO_PUBLIC_API_URL`.
+O Railway hospeda o **backend + MySQL** na nuvem, com **HTTPS** de graça num domínio
+`*.up.railway.app`. O backend **cria as tabelas e o usuário admin sozinho** no primeiro
+deploy — não precisa rodar nada manualmente.
+
+### 1) Criar o projeto
+1. Acesse **https://railway.com** e faça login com o **GitHub**.
+2. **New Project → Deploy from GitHub repo →** selecione `MatheusCarm0/stop-rotas-app`.
+3. No serviço criado: **Settings → Root Directory =** `backend`
+   (o Railway lê o `backend/railway.json` e builda pelo `Dockerfile`).
+
+### 2) Adicionar o banco MySQL
+1. Dentro do projeto: **New → Database → Add MySQL**.
+2. Isso cria um serviço **MySQL** com as variáveis de conexão prontas.
+
+### 3) Ligar o backend ao banco (variáveis)
+No serviço do **backend → Variables**, adicione (usando *referências* ao serviço MySQL —
+troque `MySQL` pelo nome real do serviço, se for diferente):
+
+```
+DB_HOST=${{MySQL.MYSQLHOST}}
+DB_PORT=${{MySQL.MYSQLPORT}}
+DB_USER=${{MySQL.MYSQLUSER}}
+DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+DB_NAME=${{MySQL.MYSQLDATABASE}}
+JWT_SECRET=coloque-uma-frase-longa-e-aleatoria-aqui
+```
+> Não defina `PORT` — o Railway injeta sozinho e o backend já usa essa porta.
+
+### 4) Publicar e pegar a URL
+1. O deploy roda automático. Nos **Logs** você deve ver:
+   `schema garantido` e `usuários padrão criados (admin/admin123)`.
+2. No backend: **Settings → Networking → Generate Domain**
+   (se pedir a porta, informe **4000**). Vai gerar algo como
+   `https://stop-rotas-app-production.up.railway.app`.
+3. Teste no navegador: `SUA_URL/health` → `{"ok":true}`.
+
+### 5) Apontar o app e gerar o APK
+Em `mobile/eas.json` (perfil `preview`):
+```json
+"env": { "EXPO_PUBLIC_API_URL": "https://SUA_URL.up.railway.app" }
+```
+```bash
+cd mobile
+npm install -g eas-cli
+eas login
+eas build -p android --profile preview   # gera o APK (link no final)
+```
+
+### Observações
+- **Login inicial:** `admin / admin123`. Entre na aba **Equipe** e cadastre os colaboradores
+  reais. (Troca de senha do admin é uma melhoria futura — por ora, mantenha o `JWT_SECRET`
+  secreto e não divulgue o admin.)
+- **Custo:** o Railway tem um crédito de teste; para uso contínuo pode exigir plano pago.
+- **Alternativa:** o **Render** funciona igual (backend por Docker apontando para `backend/`,
+  + um MySQL gerenciado externo, ex.: Aiven/PlanetScale, preenchendo os mesmos `DB_*`).
 
 ---
 

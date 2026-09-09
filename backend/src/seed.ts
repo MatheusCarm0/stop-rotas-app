@@ -1,26 +1,13 @@
-// Popula usuários iniciais. Rode com: npm run seed
-// (dentro do Docker: docker compose exec backend npm run seed)
-import bcrypt from "bcryptjs";
+// Popula usuários iniciais manualmente. Rode com: npm run seed
+// (no Docker: docker compose exec backend npm run seed)
+// Obs.: em produção o backend também cria o admin sozinho se o banco estiver vazio.
 import { pool, waitForDb } from "./db.js";
-
-const USERS = [
-  { name: "Administrador", username: "admin", password: "admin123", role: "admin" as const },
-  { name: "Bruno Alves", username: "bruno", password: "senha123", role: "worker" as const },
-  { name: "Camila Souza", username: "camila", password: "senha123", role: "worker" as const },
-];
+import { DEFAULT_USERS, seedUsers } from "./seedData.js";
 
 async function run() {
   await waitForDb();
-  for (const u of USERS) {
-    const hash = await bcrypt.hash(u.password, 10);
-    await pool.query(
-      `INSERT INTO employees (name, username, password_hash, role)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE name=VALUES(name), password_hash=VALUES(password_hash), role=VALUES(role)`,
-      [u.name, u.username, hash, u.role]
-    );
-    console.log(`[seed] ${u.role.padEnd(6)} ${u.username} / ${u.password}`);
-  }
+  await seedUsers(pool);
+  for (const u of DEFAULT_USERS) console.log(`[seed] ${u.role.padEnd(6)} ${u.username} / ${u.password}`);
   console.log("[seed] concluído");
   await pool.end();
 }
