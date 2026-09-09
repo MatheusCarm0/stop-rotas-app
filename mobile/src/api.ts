@@ -38,6 +38,10 @@ export const api = {
   reportToday: () => request<any>("/reports/today"),
   reportMonthly: (months = 6) => request<any[]>(`/reports/monthly?months=${months}`),
   reportPerformance: () => request<any[]>("/reports/performance"),
+  reportSummary: (days = 30) => request<any>(`/reports/summary?days=${days}`),
+  reportDaily: (days = 14) => request<any[]>(`/reports/daily?days=${days}`),
+  reportRanking: (days = 30) => request<any[]>(`/reports/ranking?days=${days}`),
+  reportShifts: (limit = 20) => request<any[]>(`/reports/shifts?limit=${limit}`),
 
   listEmployees: () => request<any[]>("/employees"),
   createEmployee: (body: { name: string; username: string; password: string; role: "admin" | "worker" }) =>

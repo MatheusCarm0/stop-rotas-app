@@ -121,16 +121,18 @@ shiftsRouter.post("/:id/locations", requireAuth, async (req, res) => {
   } else {
     movingFlag = added > 5;
   }
+  // tempo em movimento (para o ritmo REAL, sem contar as paradas)
+  const addMoving = movingFlag ? Math.min(spanS > 0 ? spanS : 5, 60) : 0;
   const duration = Math.max(
     0,
     Math.floor((Date.now() - new Date(shift.started_at).getTime()) / 1000)
   );
   await pool.query(
     `UPDATE shifts
-     SET distance_m = distance_m + ?, last_lat=?, last_lng=?, last_seen_at=NOW(),
-         moving=?, duration_s=?
+     SET distance_m = distance_m + ?, moving_s = moving_s + ?, last_lat=?, last_lng=?,
+         last_seen_at=NOW(), moving=?, duration_s=?
      WHERE id=?`,
-    [added, last.lat, last.lng, movingFlag ? 1 : 0, duration, id]
+    [added, addMoving, last.lat, last.lng, movingFlag ? 1 : 0, duration, id]
   );
 
   const snap = await shiftSnapshot(id);

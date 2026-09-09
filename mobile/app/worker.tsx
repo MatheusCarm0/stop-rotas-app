@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { api } from "../src/api";
@@ -7,20 +7,24 @@ import { requestPermissions, startTracking, stopTracking } from "../src/location
 import { getActiveShift, setActiveShift, clearSession } from "../src/session";
 import { fmtKm, fmtPace, fmtTime, haversine, type Pt } from "../src/geo";
 import { LiveMap } from "../src/LiveMap";
-import { theme } from "../src/theme";
+import { useTheme, type Palette } from "../src/theme";
 
 export default function Worker() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { colors: c } = useTheme();
+  const s = useMemo(() => makeStyles(c), [c]);
+
   const [shiftId, setShiftId] = useState<number | null>(null);
   const [points, setPoints] = useState<Pt[]>([]);
   const [distance, setDistance] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [movingTime, setMovingTime] = useState(0);
   const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const startRef = useRef<number>(0);
   const lastRef = useRef<{ p: Pt; t: number } | null>(null);
+  const movingRef = useRef(0);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const moveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,11 +63,13 @@ export default function Worker() {
           const d = haversine(lastRef.current.p.lat, lastRef.current.p.lng, p.lat, p.lng);
           const dt = (now - lastRef.current.t) / 1000;
           if (d < 500) setDistance((prev) => prev + d);
-          // andando se deslocou de forma consistente
           if (dt > 0 && d / dt > 0.4) {
+            // andando: acumula tempo em movimento (para o ritmo REAL)
+            movingRef.current += dt;
+            setMovingTime(movingRef.current);
             setMoving(true);
             if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
-            moveTimeoutRef.current = setTimeout(() => setMoving(false), 12000); // sem update em 12s = parado
+            moveTimeoutRef.current = setTimeout(() => setMoving(false), 12000);
           }
         }
         lastRef.current = { p, t: now };
@@ -81,17 +87,12 @@ export default function Worker() {
         return;
       }
       if (!perm.background) {
-        Alert.alert(
-          "Dica",
-          "Para registrar com a tela bloqueada, autorize a localização 'o tempo todo' nas configurações. Sem isso, o trajeto é registrado com o app aberto."
-        );
+        Alert.alert("Dica", "Para registrar com a tela bloqueada, autorize a localização 'o tempo todo'. Sem isso, o trajeto é registrado com o app aberto.");
       }
       const shift = await api.startShift();
       await setActiveShift(shift.id);
       setShiftId(shift.id);
-      setPoints([]);
-      setDistance(0);
-      lastRef.current = null;
+      setPoints([]); setDistance(0); setMovingTime(0); movingRef.current = 0; lastRef.current = null;
       startRef.current = Date.now();
       await startTracking();
       await beginForeground();
@@ -107,8 +108,7 @@ export default function Worker() {
     Alert.alert("Encerrar expediente", "Deseja finalizar e gerar o comprovante?", [
       { text: "Cancelar", style: "cancel" },
       {
-        text: "Encerrar",
-        style: "destructive",
+        text: "Encerrar", style: "destructive",
         onPress: async () => {
           setBusy(true);
           try {
@@ -136,12 +136,14 @@ export default function Worker() {
     router.replace("/");
   }
 
+  const speedKmh = elapsed > 5 ? (distance / 1000) / (elapsed / 3600) : 0;
+
   if (!shiftId) {
     return (
       <View style={[s.c, { padding: 24, justifyContent: "center" }]}>
-        <View style={[s.pill, { backgroundColor: theme.panel, alignSelf: "flex-start" }]}>
-          <View style={[s.pip, { backgroundColor: theme.muted }]} />
-          <Text style={[s.pillTxt, { color: theme.muted }]}>Fora do expediente</Text>
+        <View style={[s.pill, { backgroundColor: c.panel, alignSelf: "flex-start" }]}>
+          <View style={[s.pip, { backgroundColor: c.muted }]} />
+          <Text style={[s.pillTxt, { color: c.muted }]}>Fora do expediente</Text>
         </View>
         <Text style={s.h1}>Pronto pra{"\n"}começar o dia?</Text>
         <Text style={s.p}>Ao iniciar, o app registra seu trajeto e distância automaticamente — inclusive em segundo plano.</Text>
@@ -149,7 +151,7 @@ export default function Worker() {
           <Text style={s.btnRedTxt}>{busy ? "Iniciando..." : "Iniciar expediente"}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onLogout} style={{ marginTop: 20 }}>
-          <Text style={{ color: theme.muted, textAlign: "center" }}>Sair</Text>
+          <Text style={{ color: c.muted, textAlign: "center" }}>Sair</Text>
         </TouchableOpacity>
       </View>
     );
@@ -158,22 +160,22 @@ export default function Worker() {
   return (
     <ScrollView style={s.c} contentContainerStyle={{ padding: 16 }}>
       <View style={s.rowBetween}>
-        <View style={[s.pill, { backgroundColor: moving ? "rgba(52,209,127,0.15)" : "rgba(255,176,32,0.15)" }]}>
-          <View style={[s.pip, { backgroundColor: moving ? theme.green : theme.amber }]} />
-          <Text style={[s.pillTxt, { color: moving ? theme.green : theme.amber }]}>{moving ? "Andando" : "Parado"}</Text>
+        <View style={[s.pill, { backgroundColor: moving ? hexA(c.green, 0.15) : hexA(c.amber, 0.15) }]}>
+          <View style={[s.pip, { backgroundColor: moving ? c.green : c.amber }]} />
+          <Text style={[s.pillTxt, { color: moving ? c.green : c.amber }]}>{moving ? "Andando" : "Parado"}</Text>
         </View>
-        <TouchableOpacity onPress={onLogout}><Text style={{ color: theme.muted }}>Sair</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onLogout}><Text style={{ color: c.muted }}>Sair</Text></TouchableOpacity>
       </View>
 
       <View style={{ marginTop: 14 }}>
-        <LiveMap points={points} follow height={320} color={theme.red} />
+        <LiveMap points={points} follow height={320} color={c.red} dark={c.mapDark} />
       </View>
 
       <View style={s.stats}>
-        <Stat label="Distância" value={fmtKm(distance)} unit="km" accent />
-        <Stat label="Tempo" value={fmtTime(elapsed)} />
-        <Stat label="Ritmo médio" value={fmtPace(distance, elapsed)} unit="/km" />
-        <Stat label="Velocidade" value={moving ? "em movimento" : "parado"} />
+        <Stat s={s} c={c} label="Distância" value={fmtKm(distance)} unit="km" accent />
+        <Stat s={s} c={c} label="Tempo total" value={fmtTime(elapsed)} />
+        <Stat s={s} c={c} label="Ritmo (andando)" value={fmtPace(distance, movingTime)} unit="/km" />
+        <Stat s={s} c={c} label="Vel. média" value={speedKmh.toFixed(1)} unit="km/h" />
       </View>
 
       <TouchableOpacity style={s.btnStop} onPress={onEnd} disabled={busy}>
@@ -183,33 +185,39 @@ export default function Worker() {
   );
 }
 
-function Stat({ label, value, unit, accent }: { label: string; value: string; unit?: string; accent?: boolean }) {
+function Stat({ s, c, label, value, unit, accent }: any) {
   return (
     <View style={s.stat}>
       <Text style={s.statK}>{label}</Text>
-      <Text style={[s.statV, accent && { color: theme.orange }]} numberOfLines={1}>
-        {value}
-        {unit ? <Text style={s.statU}> {unit}</Text> : null}
+      <Text style={[s.statV, accent && { color: c.orange }]} numberOfLines={1}>
+        {value}{unit ? <Text style={s.statU}> {unit}</Text> : null}
       </Text>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  c: { flex: 1, backgroundColor: theme.ink },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  h1: { color: theme.paper, fontSize: 32, fontWeight: "900", marginTop: 16, marginBottom: 10, lineHeight: 34 },
-  p: { color: theme.muted, fontSize: 15, marginBottom: 24 },
-  pill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, gap: 6 },
-  pip: { width: 8, height: 8, borderRadius: 4 },
-  pillTxt: { fontWeight: "800", fontSize: 12, letterSpacing: 0.5, textTransform: "uppercase" },
-  stats: { flexDirection: "row", flexWrap: "wrap", marginTop: 14, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: theme.line },
-  stat: { width: "50%", backgroundColor: theme.panel, padding: 16, borderWidth: 0.5, borderColor: theme.line },
-  statK: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
-  statV: { color: theme.paper, fontSize: 26, fontWeight: "900", marginTop: 4 },
-  statU: { color: theme.muted, fontSize: 14, fontWeight: "600" },
-  btnRed: { backgroundColor: theme.red, borderRadius: 12, padding: 16, alignItems: "center" },
-  btnRedTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  btnStop: { borderWidth: 2, borderColor: theme.red, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 16 },
-  btnStopTxt: { color: theme.red, fontWeight: "800" },
-});
+function hexA(hex: string, a: number) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    c: { flex: 1, backgroundColor: c.ink },
+    rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    h1: { color: c.paper, fontSize: 32, fontWeight: "900", marginTop: 16, marginBottom: 10, lineHeight: 34 },
+    p: { color: c.muted, fontSize: 15, marginBottom: 24 },
+    pill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, gap: 6 },
+    pip: { width: 8, height: 8, borderRadius: 4 },
+    pillTxt: { fontWeight: "800", fontSize: 12, letterSpacing: 0.5, textTransform: "uppercase" },
+    stats: { flexDirection: "row", flexWrap: "wrap", marginTop: 14, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: c.line },
+    stat: { width: "50%", backgroundColor: c.panel, padding: 16, borderWidth: 0.5, borderColor: c.line },
+    statK: { color: c.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
+    statV: { color: c.paper, fontSize: 24, fontWeight: "900", marginTop: 4 },
+    statU: { color: c.muted, fontSize: 14, fontWeight: "600" },
+    btnRed: { backgroundColor: c.red, borderRadius: 12, padding: 16, alignItems: "center" },
+    btnRedTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
+    btnStop: { borderWidth: 2, borderColor: c.red, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 16 },
+    btnStopTxt: { color: c.red, fontWeight: "800" },
+  });

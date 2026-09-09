@@ -18,6 +18,7 @@ interface Props {
   height: number;
   color?: string;
   center?: { lat: number; lng: number };
+  dark?: boolean;
 }
 
 // Campinas como centro padrão até o GPS dar a primeira posição.
@@ -27,13 +28,13 @@ const HTML = `<!doctype html><html><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<style>html,body,#map{height:100%;margin:0;background:#0d0c0b}
-.lbl{background:#141210;color:#f0ebe1;border:1px solid #322e28;border-radius:6px;padding:2px 6px;font:700 11px system-ui;white-space:nowrap}</style>
+<style>html,body,#map{height:100%;margin:0;background:__BG__}
+.lbl{background:__LBLBG__;color:__LBLFG__;border:1px solid __LBLBD__;border-radius:6px;padding:2px 6px;font:700 11px system-ui;white-space:nowrap}</style>
 </head><body><div id="map"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 var map = L.map('map', { zoomControl:false, attributionControl:false }).setView([__LAT__, __LNG__], 15);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:20, subdomains:'abcd' }).addTo(map);
+L.tileLayer('__TILE__', { maxZoom:20, subdomains:'abcd' }).addTo(map);
 var routeColor = '__COLOR__';
 var line = L.polyline([], { color: routeColor, weight: 5, opacity: 0.95, lineJoin:'round' }).addTo(map);
 var here = null, startDot = null, mkLayer = L.layerGroup().addTo(map);
@@ -71,14 +72,23 @@ window.setData = function(payload){
 window.ReactNativeWebView && window.ReactNativeWebView.postMessage('ready');
 </script></body></html>`;
 
-export function LiveMap({ points = [], markers = [], follow = false, height, color = theme.red, center }: Props) {
+export function LiveMap({ points = [], markers = [], follow = false, height, color = theme.red, center, dark = true }: Props) {
   const ref = useRef<WebView>(null);
   const ready = useRef(false);
   const c = center || points[points.length - 1] || DEFAULT_CENTER;
 
+  const tile = dark
+    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+  const bg = dark ? "#0d0c0b" : "#e8e4db";
   const html = HTML.replace("__LAT__", String(c.lat))
     .replace("__LNG__", String(c.lng))
-    .replace("__COLOR__", color);
+    .replace("__COLOR__", color)
+    .replace("__TILE__", tile)
+    .replace(/__BG__/g, bg)
+    .replace("__LBLBG__", dark ? "#141210" : "#ffffff")
+    .replace("__LBLFG__", dark ? "#f0ebe1" : "#1c1916")
+    .replace("__LBLBD__", dark ? "#322e28" : "#d9d2c4");
 
   function flush() {
     if (!ready.current) return;
@@ -92,7 +102,7 @@ export function LiveMap({ points = [], markers = [], follow = false, height, col
   }, [points, markers, follow]);
 
   return (
-    <View style={{ height, borderRadius: 12, overflow: "hidden", backgroundColor: "#0d0c0b" }}>
+    <View style={{ height, borderRadius: 12, overflow: "hidden", backgroundColor: bg }}>
       <WebView
         ref={ref}
         originWhitelist={["*"]}
@@ -103,7 +113,7 @@ export function LiveMap({ points = [], markers = [], follow = false, height, col
           ready.current = true;
           flush();
         }}
-        style={{ backgroundColor: "#0d0c0b" }}
+        style={{ backgroundColor: bg }}
       />
     </View>
   );

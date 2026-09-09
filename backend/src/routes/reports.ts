@@ -53,3 +53,76 @@ reportsRouter.get("/today", requireAuth, requireAdmin, async (_req, res) => {
   );
   res.json((rows as any[])[0]);
 });
+
+function daysParam(v: unknown, def = 30) {
+  return Math.min(365, Math.max(1, Number(v ?? def)));
+}
+
+// Resumo do período — KPIs principais dos relatórios
+reportsRouter.get("/summary", requireAuth, requireAdmin, async (req, res) => {
+  const days = daysParam(req.query.days);
+  const [rows] = await pool.query(
+    `SELECT
+       COALESCE(SUM(distance_m),0)  AS distance_m,
+       COALESCE(SUM(duration_s),0)  AS duration_s,
+       COALESCE(SUM(moving_s),0)    AS moving_s,
+       COUNT(*)                     AS shifts,
+       COUNT(DISTINCT DATE(started_at)) AS active_days,
+       COUNT(DISTINCT employee_id)  AS workers
+     FROM shifts
+     WHERE started_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`,
+    [days - 1]
+  );
+  res.json((rows as any[])[0]);
+});
+
+// Distância e tempo por dia (para o gráfico)
+reportsRouter.get("/daily", requireAuth, requireAdmin, async (req, res) => {
+  const days = daysParam(req.query.days, 14);
+  const [rows] = await pool.query(
+    `SELECT DATE(started_at) AS day,
+            COALESCE(SUM(distance_m),0) AS distance_m,
+            COALESCE(SUM(duration_s),0) AS duration_s
+     FROM shifts
+     WHERE started_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+     GROUP BY DATE(started_at)
+     ORDER BY day`,
+    [days - 1]
+  );
+  res.json(rows);
+});
+
+// Ranking por colaborador no período
+reportsRouter.get("/ranking", requireAuth, requireAdmin, async (req, res) => {
+  const days = daysParam(req.query.days);
+  const [rows] = await pool.query(
+    `SELECT e.id, e.name,
+            COUNT(s.id) AS shifts,
+            COALESCE(SUM(s.distance_m),0) AS distance_m,
+            COALESCE(SUM(s.duration_s),0) AS duration_s,
+            COALESCE(SUM(s.moving_s),0)   AS moving_s,
+            MAX(s.started_at) AS last_active
+     FROM employees e
+     LEFT JOIN shifts s ON s.employee_id = e.id
+        AND s.started_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+     WHERE e.role = 'worker'
+     GROUP BY e.id, e.name
+     ORDER BY distance_m DESC`,
+    [days - 1]
+  );
+  res.json(rows);
+});
+
+// Histórico dos últimos expedientes
+reportsRouter.get("/shifts", requireAuth, requireAdmin, async (req, res) => {
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit ?? 20)));
+  const [rows] = await pool.query(
+    `SELECT s.id, s.status, s.started_at, s.ended_at, s.distance_m, s.duration_s, s.moving_s,
+            e.name AS employee_name
+     FROM shifts s JOIN employees e ON e.id = s.employee_id
+     ORDER BY s.started_at DESC
+     LIMIT ?`,
+    [limit]
+  );
+  res.json(rows);
+});

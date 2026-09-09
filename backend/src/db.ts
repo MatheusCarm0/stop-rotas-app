@@ -13,6 +13,22 @@ export const pool = mysql.createPool({
   timezone: "Z",
 });
 
+/** Migrações idempotentes (MySQL não tem ADD COLUMN IF NOT EXISTS). */
+export async function migrate(): Promise<void> {
+  await ensureColumn("shifts", "moving_s", "INT NOT NULL DEFAULT 0");
+}
+async function ensureColumn(table: string, col: string, ddl: string) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS c FROM information_schema.columns
+     WHERE table_schema = ? AND table_name = ? AND column_name = ?`,
+    [config.db.database, table, col]
+  );
+  if ((rows as any[])[0].c === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`);
+    console.log(`[db] migrado: ${table}.${col}`);
+  }
+}
+
 /** Espera o MySQL aceitar conexões (útil ao subir junto no Docker). */
 export async function waitForDb(retries = 30, delayMs = 2000): Promise<void> {
   for (let i = 1; i <= retries; i++) {

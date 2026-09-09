@@ -39,3 +39,14 @@ export async function getActiveShift(): Promise<number | null> {
   const raw = await AsyncStorage.getItem(K_SHIFT);
   return raw ? Number(raw) : null;
 }
+
+const K_THEME = "themeMode";
+
+export async function getThemeMode(): Promise<"dark" | "light" | null> {
+  const raw = await AsyncStorage.getItem(K_THEME);
+  return raw === "light" || raw === "dark" ? raw : null;
+}
+
+export async function setThemeMode(mode: "dark" | "light") {
+  await AsyncStorage.setItem(K_THEME, mode);
+}

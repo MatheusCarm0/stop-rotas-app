@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { config } from "./config.js";
-import { waitForDb } from "./db.js";
+import { waitForDb, migrate } from "./db.js";
 import { initRealtime } from "./realtime.js";
 import { authRouter } from "./routes/auth.js";
 import { employeesRouter } from "./routes/employees.js";
@@ -11,6 +11,7 @@ import { reportsRouter } from "./routes/reports.js";
 
 async function main() {
   await waitForDb();
+  await migrate();
 
   const app = express();
   app.use(cors());

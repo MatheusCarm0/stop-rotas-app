@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS shifts (
   ended_at     TIMESTAMP NULL,
   distance_m   DOUBLE NOT NULL DEFAULT 0,
   duration_s   INT NOT NULL DEFAULT 0,
+  moving_s     INT NOT NULL DEFAULT 0,
   deliveries_count INT NOT NULL DEFAULT 0,
   last_lat     DOUBLE NULL,
   last_lng     DOUBLE NULL,
