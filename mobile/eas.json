@@ -4,7 +4,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.seudominio.com.br"
+        "EXPO_PUBLIC_API_URL": "https://stoprotas-backend.onrender.com"
       },
       "android": {
         "buildType": "apk"
