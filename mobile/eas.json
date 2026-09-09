@@ -3,6 +3,9 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.seudominio.com.br"
+      },
       "android": {
         "buildType": "apk"
       }

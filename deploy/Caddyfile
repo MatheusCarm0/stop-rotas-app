@@ -1,0 +1,6 @@
+# Caddy faz HTTPS automático (Let's Encrypt) para o seu domínio
+# e encaminha tudo para o backend. Defina DOMAIN no .env.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy backend:4000
+}

@@ -29,12 +29,13 @@ const HTML = `<!doctype html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>html,body,#map{height:100%;margin:0;background:__BG__}
+.leaflet-tile-pane{filter:__FILTER__}
 .lbl{background:__LBLBG__;color:__LBLFG__;border:1px solid __LBLBD__;border-radius:6px;padding:2px 6px;font:700 11px system-ui;white-space:nowrap}</style>
 </head><body><div id="map"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 var map = L.map('map', { zoomControl:false, attributionControl:false }).setView([__LAT__, __LNG__], 15);
-L.tileLayer('__TILE__', { maxZoom:20, subdomains:'abcd' }).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, subdomains:'abc' }).addTo(map);
 var routeColor = '__COLOR__';
 var line = L.polyline([], { color: routeColor, weight: 5, opacity: 0.95, lineJoin:'round' }).addTo(map);
 var here = null, startDot = null, mkLayer = L.layerGroup().addTo(map);
@@ -77,14 +78,13 @@ export function LiveMap({ points = [], markers = [], follow = false, height, col
   const ready = useRef(false);
   const c = center || points[points.length - 1] || DEFAULT_CENTER;
 
-  const tile = dark
-    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-    : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
   const bg = dark ? "#0d0c0b" : "#e8e4db";
+  // OpenStreetMap (sem chave). No escuro, invertemos só os tiles via CSS.
+  const filter = dark ? "invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9)" : "none";
   const html = HTML.replace("__LAT__", String(c.lat))
     .replace("__LNG__", String(c.lng))
     .replace("__COLOR__", color)
-    .replace("__TILE__", tile)
+    .replace("__FILTER__", filter)
     .replace(/__BG__/g, bg)
     .replace("__LBLBG__", dark ? "#141210" : "#ffffff")
     .replace("__LBLFG__", dark ? "#f0ebe1" : "#1c1916")
