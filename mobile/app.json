@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Stop Rotas",
+    "slug": "stop-rotas",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "stoprotas",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "android": {
+      "package": "com.stoppanfletos.rotas",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "O Stop Rotas usa sua localização para registrar o trajeto da distribuição, inclusive com o app em segundo plano durante o expediente.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ]
+  }
+}

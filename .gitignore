@@ -1,0 +1,24 @@
+# deps
+node_modules/
+# env
+.env
+*.local
+# builds
+dist/
+build/
+android/
+ios/
+*.apk
+*.aab
+# expo
+.expo/
+.expo-shared/
+web-build/
+# logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+# os
+.DS_Store
+Thumbs.db
