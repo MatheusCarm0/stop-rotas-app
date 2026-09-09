@@ -1,158 +1,93 @@
 # Deploy e build de teste (APK)
 
+O backend usa **PostgreSQL** e se **auto-inicializa** (cria as tabelas e o usuário admin
+no primeiro start). Isso deixa o deploy no **Render** bem simples, porque o Render tem
+**PostgreSQL grátis nativo** — não precisa de banco externo.
+
 ## O que falta para uma build de testes usável
-
-Hoje tudo roda no **seu PC** (backend no Docker + app via Expo Go na sua rede).
-Para outras pessoas testarem o APK no celular delas, em qualquer lugar, faltam **3 coisas**:
-
-1. **Hospedar o backend + MySQL na internet** (os testers não estão na sua rede local). — **Sim, precisa hospedar.**
-2. **HTTPS** — o Android bloqueia HTTP puro por padrão. O jeito limpo é um domínio com HTTPS (já resolvido pelo Caddy aqui).
-3. **Gerar o APK** apontando para a URL pública do backend.
-
-Abaixo, o passo a passo.
+1. **Hospedar backend + Postgres na internet** (os testers não estão na sua rede). — precisa.
+2. **HTTPS** — o Render já entrega HTTPS de graça.
+3. **Gerar o APK** apontando para a URL pública.
 
 ---
 
-## Passo 1 — Hospedar o backend (VPS com Docker) — recomendado
+## ⭐ Render (recomendado) — via Blueprint (quase 1 clique)
 
-Serve qualquer VPS Linux barata (Hostinger, Contabo, DigitalOcean, AWS Lightsail, Oracle Free…).
+1. Acesse **https://render.com** e faça login com o **GitHub**.
+2. **New → Blueprint** → selecione o repositório `MatheusCarm0/stop-rotas-app`.
+   - O Render lê o `render.yaml` e cria **dois** recursos: o **PostgreSQL** (`stoprotas-db`)
+     e o **Web Service** (`stoprotas-backend`, build por Docker na pasta `backend/`).
+   - O `DATABASE_URL` é ligado automaticamente e o `JWT_SECRET` é gerado sozinho.
+3. Clique em **Apply** e aguarde o build/deploy.
+4. Nos **Logs** do backend você deve ver:
+   `conectado ao PostgreSQL` → `schema garantido` → `usuários padrão criados (admin/admin123)`.
+5. A URL pública aparece no topo do serviço, algo como
+   `https://stoprotas-backend.onrender.com`. Teste no navegador: `SUA_URL/health` → `{"ok":true}`.
 
-### 1.1 Criar o servidor
-- Suba uma VM **Ubuntu 22.04+**, anote o **IP público**.
+### Render manual (se preferir sem o Blueprint)
+1. **New → PostgreSQL** (plano Free) → copie a **Internal Database URL**.
+2. **New → Web Service** → conecte o repo → **Root Directory = `backend`**
+   (Runtime **Docker**, detecta o `Dockerfile`), plano **Free**.
+3. Em **Environment**, adicione:
+   - `DATABASE_URL` = a Internal Database URL do passo 1
+   - `JWT_SECRET` = uma frase longa e aleatória
+   > Não defina `PORT` (o Render injeta e o backend já usa).
+   > Só use `DB_SSL=true` se conectar por uma URL **externa** (a Internal não precisa).
 
-### 1.2 Apontar um domínio
-- No seu provedor de domínio, crie um registro **A**: `api.seudominio.com.br → IP_DO_SERVIDOR`.
-- (Sem domínio? Veja o "Plano B" no fim.)
+> ⏰ No plano Free, o serviço **hiberna após ~15 min** sem acesso; o primeiro request
+> depois disso demora ~1 min pra "acordar". Normal para testes.
 
-### 1.3 Instalar Docker no servidor
+---
+
+## Apontar o app e gerar o APK
+
+1. Em `mobile/eas.json` (perfil `preview`), coloque sua URL:
+   ```json
+   "env": { "EXPO_PUBLIC_API_URL": "https://SUA_URL.onrender.com" }
+   ```
+2. Gere o APK:
+   ```bash
+   cd mobile
+   npm install -g eas-cli
+   eas login                 # conta Expo grátis
+   eas build -p android --profile preview
+   ```
+   No fim, o EAS devolve um **link do `.apk`** para instalar no Android
+   (permita "instalar de fontes desconhecidas"). No APK o **GPS em segundo plano**
+   (tela bloqueada) funciona — ao contrário do Expo Go.
+
+- **Login inicial:** `admin / admin123`. Entre na aba **Equipe** e cadastre os reais.
+
+---
+
+## Alternativa: VPS com Docker (tudo self-hosted, com domínio)
+
+Com um domínio apontando para a VM (registro A) e `DOMAIN` no `.env`:
 ```bash
 curl -fsSL https://get.docker.com | sh
-```
-
-### 1.4 Subir o projeto
-```bash
-git clone https://github.com/MatheusCarm0/stop-rotas-app.git
-cd stop-rotas-app
-cp .env.example .env
-nano .env    # troque as senhas, o JWT_SECRET e defina DOMAIN=api.seudominio.com.br
-```
-```bash
+git clone https://github.com/MatheusCarm0/stop-rotas-app.git && cd stop-rotas-app
+cp .env.example .env    # troque senhas, JWT_SECRET e defina DOMAIN
 docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec backend npm run seed
 ```
-- O **Caddy** já pega o certificado HTTPS sozinho.
-- Libere as portas **80** e **443** no firewall do provedor.
-- Teste: abra `https://api.seudominio.com.br/health` → deve responder `{"ok":true}`.
-
-> Segurança mínima antes de convidar testers: troque as senhas do `.env`, crie os
-> colaboradores reais na aba **Equipe** e remova/!troque os usuários do seed.
+O **Caddy** cuida do HTTPS automático. Teste `https://SEU_DOMINIO/health`.
 
 ---
 
-## Passo 2 — Apontar o app para o backend hospedado
-
-Edite `mobile/eas.json` (perfil `preview`) e coloque sua URL:
-```json
-"env": { "EXPO_PUBLIC_API_URL": "https://api.seudominio.com.br" }
-```
-
----
-
-## Passo 3 — Gerar o APK (EAS Build)
-
+## Rodar localmente (desenvolvimento)
 ```bash
-cd mobile
-npm install -g eas-cli
-eas login                         # crie uma conta Expo grátis, se não tiver
-eas build -p android --profile preview
+cp .env.example .env
+docker compose up -d --build      # Postgres + backend + Adminer
+# Adminer em http://localhost:8080  (sistema: PostgreSQL, servidor: postgres)
 ```
-- Ao final, o EAS devolve um **link para baixar o `.apk`**.
-- Mande esse link para os testers instalarem no Android (precisa permitir "instalar de fontes desconhecidas").
-- O rastreamento em **segundo plano** (tela bloqueada) já funciona no APK — diferente do Expo Go.
-
-> A primeira build pede para gerar um **keystore** — deixe o EAS criar automaticamente.
-
----
-
-## ⭐ Caminho recomendado para testes: Railway (sem servidor próprio, sem domínio)
-
-O Railway hospeda o **backend + MySQL** na nuvem, com **HTTPS** de graça num domínio
-`*.up.railway.app`. O backend **cria as tabelas e o usuário admin sozinho** no primeiro
-deploy — não precisa rodar nada manualmente.
-
-### 1) Criar o projeto
-1. Acesse **https://railway.com** e faça login com o **GitHub**.
-2. **New Project → Deploy from GitHub repo →** selecione `MatheusCarm0/stop-rotas-app`.
-3. No serviço criado: **Settings → Root Directory =** `backend`
-   (o Railway lê o `backend/railway.json` e builda pelo `Dockerfile`).
-
-### 2) Adicionar o banco MySQL
-1. Dentro do projeto: **New → Database → Add MySQL**.
-2. Isso cria um serviço **MySQL** com as variáveis de conexão prontas.
-
-### 3) Ligar o backend ao banco (variáveis)
-No serviço do **backend → Variables**, adicione só **duas** variáveis
-(troque `MySQL` pelo nome real do serviço de banco, se for diferente):
-
-```
-DB_URL=${{MySQL.MYSQL_URL}}
-JWT_SECRET=coloque-uma-frase-longa-e-aleatoria-aqui
-```
-> `MYSQL_URL` é a string de conexão que o próprio serviço MySQL do Railway expõe.
-> Não defina `PORT` — o Railway injeta sozinho e o backend já usa essa porta.
->
-> (Alternativa às 2 acima: `DB_HOST=${{MySQL.MYSQLHOST}}`, `DB_PORT=${{MySQL.MYSQLPORT}}`,
-> `DB_USER=${{MySQL.MYSQLUSER}}`, `DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}`,
-> `DB_NAME=${{MySQL.MYSQLDATABASE}}` + `JWT_SECRET`.)
-
-### 4) Publicar e pegar a URL
-1. O deploy roda automático. Nos **Logs** você deve ver:
-   `schema garantido` e `usuários padrão criados (admin/admin123)`.
-2. No backend: **Settings → Networking → Generate Domain**
-   (se pedir a porta, informe **4000**). Vai gerar algo como
-   `https://stop-rotas-app-production.up.railway.app`.
-3. Teste no navegador: `SUA_URL/health` → `{"ok":true}`.
-
-### 5) Apontar o app e gerar o APK
-Em `mobile/eas.json` (perfil `preview`):
-```json
-"env": { "EXPO_PUBLIC_API_URL": "https://SUA_URL.up.railway.app" }
-```
-```bash
-cd mobile
-npm install -g eas-cli
-eas login
-eas build -p android --profile preview   # gera o APK (link no final)
-```
-
-### Observações
-- **Login inicial:** `admin / admin123`. Entre na aba **Equipe** e cadastre os colaboradores
-  reais. (Troca de senha do admin é uma melhoria futura — por ora, mantenha o `JWT_SECRET`
-  secreto e não divulgue o admin.)
-- **Custo:** o Railway tem um crédito de teste; para uso contínuo pode exigir plano pago.
-- **Alternativa:** o **Render** funciona igual (backend por Docker apontando para `backend/`,
-  + um MySQL gerenciado externo, ex.: Aiven/PlanetScale, preenchendo os mesmos `DB_*`).
-
----
-
-## Plano B — Testar o APK sem domínio (rápido, temporário)
-
-Use um túnel HTTPS para o backend do seu PC:
-```bash
-# com o backend rodando local (docker compose up -d)
-npx cloudflared tunnel --url http://localhost:4000
-```
-Isso gera uma URL `https://algo.trycloudflare.com`. Use-a no `EXPO_PUBLIC_API_URL`
-do `eas.json` e gere o APK. Serve para um teste pontual (a URL muda a cada execução).
+O backend cria as tabelas e o admin sozinho. Usuários: `admin/admin123`, `bruno/senha123`.
 
 ---
 
 ## Resumo
-
-| Item | Necessário para testers? |
+| Item | Render (Blueprint) |
 |---|---|
-| Backend hospedado na internet | **Sim** |
-| Banco MySQL (no mesmo servidor ou gerenciado) | **Sim** |
-| HTTPS (domínio + Caddy, ou plataforma) | **Sim** (Android exige) |
-| APK via EAS apontando para a URL pública | **Sim** |
-| Conta Expo (grátis) para o EAS Build | **Sim** |
+| Backend | Web Service (Docker, pasta `backend/`) |
+| Banco | PostgreSQL grátis do próprio Render |
+| HTTPS | Automático (`*.onrender.com`) |
+| DATABASE_URL / JWT_SECRET | Ligados/gerados pelo `render.yaml` |
+| APK | `eas build -p android --profile preview` com a URL pública |

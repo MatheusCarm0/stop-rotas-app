@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import type { Pool } from "mysql2/promise";
+import type { Pool } from "pg";
 
 export const DEFAULT_USERS = [
   { name: "Administrador", username: "admin", password: "admin123", role: "admin" as const },
@@ -13,8 +13,8 @@ export async function seedUsers(pool: Pool) {
     const hash = await bcrypt.hash(u.password, 10);
     await pool.query(
       `INSERT INTO employees (name, username, password_hash, role)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE name=VALUES(name), role=VALUES(role)`,
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (username) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role`,
       [u.name, u.username, hash, u.role]
     );
   }

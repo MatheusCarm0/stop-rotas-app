@@ -1,0 +1,25 @@
+# Blueprint do Render: cria o Postgres + o backend já conectados.
+# No Render: New → Blueprint → selecione este repositório.
+databases:
+  - name: stoprotas-db
+    plan: free
+    databaseName: stoprotas
+    user: stoprotas
+
+services:
+  - type: web
+    name: stoprotas-backend
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stoprotas-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES
+        value: 7d

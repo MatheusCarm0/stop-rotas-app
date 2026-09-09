@@ -16,11 +16,11 @@ authRouter.post("/login", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Dados inválidos" });
   const { username, password } = parsed.data;
 
-  const [rows] = await pool.query(
-    "SELECT id, name, username, password_hash, role, active FROM employees WHERE username = ? LIMIT 1",
+  const { rows } = await pool.query(
+    "SELECT id, name, username, password_hash, role, active FROM employees WHERE username = $1 LIMIT 1",
     [username]
   );
-  const user = (rows as any[])[0];
+  const user = rows[0];
   if (!user || !user.active)
     return res.status(401).json({ error: "Usuário ou senha inválidos" });
 

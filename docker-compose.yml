@@ -1,20 +1,18 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: stoprotas-mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: stoprotas-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-stoprotas}
-      MYSQL_USER: ${MYSQL_USER:-stoprotas}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-stoprotas}
+      POSTGRES_DB: ${POSTGRES_DB:-stoprotas}
+      POSTGRES_USER: ${POSTGRES_USER:-stoprotas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stoprotas}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stoprotas}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -24,16 +22,12 @@ services:
     container_name: stoprotas-backend
     restart: unless-stopped
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 4000
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_USER: ${MYSQL_USER:-stoprotas}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-stoprotas}
-      DB_NAME: ${MYSQL_DATABASE:-stoprotas}
+      DATABASE_URL: postgres://${POSTGRES_USER:-stoprotas}:${POSTGRES_PASSWORD:-stoprotas}@postgres:5432/${POSTGRES_DB:-stoprotas}
       JWT_SECRET: ${JWT_SECRET:-troque-este-segredo-em-producao}
       JWT_EXPIRES: 7d
     ports:
@@ -44,9 +38,9 @@ services:
     container_name: stoprotas-adminer
     restart: unless-stopped
     depends_on:
-      - mysql
+      - postgres
     ports:
       - "8080:8080"
 
 volumes:
-  mysql_data:
+  postgres_data:

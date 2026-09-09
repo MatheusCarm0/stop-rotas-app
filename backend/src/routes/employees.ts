@@ -8,7 +8,7 @@ export const employeesRouter = Router();
 
 // Lista funcionários (admin)
 employeesRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
-  const [rows] = await pool.query(
+  const { rows } = await pool.query(
     "SELECT id, name, username, role, active, created_at FROM employees ORDER BY name"
   );
   res.json(rows);
@@ -28,13 +28,13 @@ employeesRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   const { name, username, password, role } = parsed.data;
   const hash = await bcrypt.hash(password, 10);
   try {
-    const [result] = await pool.query(
-      "INSERT INTO employees (name, username, password_hash, role) VALUES (?, ?, ?, ?)",
+    const { rows } = await pool.query(
+      "INSERT INTO employees (name, username, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id",
       [name, username, hash, role]
     );
-    res.status(201).json({ id: (result as any).insertId, name, username, role });
+    res.status(201).json({ id: rows[0].id, name, username, role });
   } catch (err: any) {
-    if (err?.code === "ER_DUP_ENTRY")
+    if (err?.code === "23505") // unique_violation
       return res.status(409).json({ error: "Nome de usuário já existe" });
     throw err;
   }

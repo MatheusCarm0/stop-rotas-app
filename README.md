@@ -7,13 +7,15 @@ e comprovantes de distribuição para o cliente final.
 
 ```
 stop-rotas-app/
-├─ docker-compose.yml      # MySQL 8 + backend + Adminer
-├─ backend/                # API Node.js + Express + TypeScript (mysql2, JWT, Socket.io)
+├─ docker-compose.yml      # PostgreSQL + backend + Adminer
+├─ render.yaml             # Blueprint de deploy no Render (Postgres + backend)
+├─ backend/                # API Node.js + Express + TypeScript (pg, JWT, Socket.io)
 └─ mobile/                 # App React Native (Expo) — funcionário + admin, build APK
 ```
 
-> **Status:** scaffold funcional. Backend + MySQL sobem e funcionam via Docker.
+> **Status:** scaffold funcional. Backend + PostgreSQL sobem e funcionam via Docker.
 > O app mobile precisa ser rodado em celular/emulador (GPS não roda em ambiente sem device).
+> Para publicar (Render) veja o **[DEPLOY.md](DEPLOY.md)**.
 
 ---
 
@@ -23,13 +25,13 @@ Pré-requisito: **Docker Desktop**.
 
 ```bash
 cp .env.example .env          # ajuste as senhas se quiser
-docker compose up -d --build  # sobe mysql + backend + adminer
-docker compose exec backend npm run seed   # cria usuários iniciais
+docker compose up -d --build  # sobe postgres + backend + adminer
 ```
 
 - API: <http://localhost:4000>  (teste: <http://localhost:4000/health>)
-- Adminer (ver o banco): <http://localhost:8080>  → sistema **MySQL**, servidor `mysql`, usuário/senha do `.env`
-- O schema (`backend/db/schema.sql`) é criado automaticamente na primeira subida.
+- Adminer (ver o banco): <http://localhost:8080>  → sistema **PostgreSQL**, servidor `postgres`, usuário/senha do `.env`
+- O backend **cria as tabelas e o usuário admin sozinho** no primeiro start
+  (não precisa rodar seed manual; se quiser, `docker compose exec backend npm run seed`).
 
 **Usuários do seed:**
 
@@ -42,10 +44,9 @@ docker compose exec backend npm run seed   # cria usuários iniciais
 ### Rodar o backend sem Docker (opcional)
 ```bash
 cd backend
-cp .env.example .env   # aponte DB_HOST para seu MySQL
+cp .env.example .env   # ajuste DATABASE_URL para seu PostgreSQL
 npm install
-npm run seed
-npm run dev
+npm run dev            # cria as tabelas e o admin no start
 ```
 
 ---
