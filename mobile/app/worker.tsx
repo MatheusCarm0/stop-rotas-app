@@ -6,7 +6,7 @@ import { api } from "../src/api";
 import { requestPermissions, startTracking, stopTracking } from "../src/location";
 import { getActiveShift, setActiveShift, clearSession } from "../src/session";
 import { fmtKm, fmtPace, fmtTime, haversine, type Pt } from "../src/geo";
-import { RouteMap } from "../src/RouteMap";
+import { LiveMap } from "../src/LiveMap";
 import { theme } from "../src/theme";
 
 export default function Worker() {
@@ -16,14 +16,14 @@ export default function Worker() {
   const [points, setPoints] = useState<Pt[]>([]);
   const [distance, setDistance] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [deliveries, setDeliveries] = useState(0);
-  const [moving, setMoving] = useState(true);
+  const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const startRef = useRef<number>(0);
-  const lastRef = useRef<Pt | null>(null);
+  const lastRef = useRef<{ p: Pt; t: number } | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const moveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +41,7 @@ export default function Worker() {
     watchRef.current?.remove();
     watchRef.current = null;
     if (timerRef.current) clearInterval(timerRef.current);
+    if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
   }
 
   async function beginForeground() {
@@ -50,17 +51,23 @@ export default function Worker() {
       }, 1000);
     }
     watchRef.current = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 5 },
+      { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 8 },
       (loc) => {
         const p: Pt = { lat: loc.coords.latitude, lng: loc.coords.longitude };
-        const spd = loc.coords.speed ?? 0;
-        setMoving(spd > 0.6);
+        const now = Date.now();
         if (lastRef.current) {
-          const d = haversine(lastRef.current.lat, lastRef.current.lng, p.lat, p.lng);
+          const d = haversine(lastRef.current.p.lat, lastRef.current.p.lng, p.lat, p.lng);
+          const dt = (now - lastRef.current.t) / 1000;
           if (d < 500) setDistance((prev) => prev + d);
+          // andando se deslocou de forma consistente
+          if (dt > 0 && d / dt > 0.4) {
+            setMoving(true);
+            if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
+            moveTimeoutRef.current = setTimeout(() => setMoving(false), 12000); // sem update em 12s = parado
+          }
         }
-        lastRef.current = p;
-        setPoints((prev) => (prev.length > 1500 ? [...prev.slice(1), p] : [...prev, p]));
+        lastRef.current = { p, t: now };
+        setPoints((prev) => (prev.length > 2000 ? [...prev.slice(1), p] : [...prev, p]));
       }
     );
   }
@@ -84,7 +91,7 @@ export default function Worker() {
       setShiftId(shift.id);
       setPoints([]);
       setDistance(0);
-      setDeliveries(0);
+      lastRef.current = null;
       startRef.current = Date.now();
       await startTracking();
       await beginForeground();
@@ -92,17 +99,6 @@ export default function Worker() {
       Alert.alert("Erro", e.message || "Não foi possível iniciar");
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function onDelivery() {
-    if (!shiftId) return;
-    const last = lastRef.current;
-    setDeliveries((d) => d + 1); // otimista
-    try {
-      await api.addDelivery(shiftId, { lat: last?.lat ?? null, lng: last?.lng ?? null });
-    } catch {
-      setDeliveries((d) => Math.max(0, d - 1));
     }
   }
 
@@ -140,8 +136,6 @@ export default function Worker() {
     router.replace("/");
   }
 
-  const mapW = width - 32;
-
   if (!shiftId) {
     return (
       <View style={[s.c, { padding: 24, justifyContent: "center" }]}>
@@ -150,7 +144,7 @@ export default function Worker() {
           <Text style={[s.pillTxt, { color: theme.muted }]}>Fora do expediente</Text>
         </View>
         <Text style={s.h1}>Pronto pra{"\n"}começar o dia?</Text>
-        <Text style={s.p}>Ao iniciar, o app registra seu trajeto, distância e paradas automaticamente — inclusive em segundo plano.</Text>
+        <Text style={s.p}>Ao iniciar, o app registra seu trajeto e distância automaticamente — inclusive em segundo plano.</Text>
         <TouchableOpacity style={s.btnRed} onPress={onStart} disabled={busy}>
           <Text style={s.btnRedTxt}>{busy ? "Iniciando..." : "Iniciar expediente"}</Text>
         </TouchableOpacity>
@@ -172,19 +166,16 @@ export default function Worker() {
       </View>
 
       <View style={{ marginTop: 14 }}>
-        <RouteMap points={points} width={mapW} height={220} color={theme.red} />
+        <LiveMap points={points} follow height={320} color={theme.red} />
       </View>
 
       <View style={s.stats}>
         <Stat label="Distância" value={fmtKm(distance)} unit="km" accent />
         <Stat label="Tempo" value={fmtTime(elapsed)} />
         <Stat label="Ritmo médio" value={fmtPace(distance, elapsed)} unit="/km" />
-        <Stat label="Entregas" value={String(deliveries)} />
+        <Stat label="Velocidade" value={moving ? "em movimento" : "parado"} />
       </View>
 
-      <TouchableOpacity style={s.btnGhost} onPress={onDelivery}>
-        <Text style={s.btnGhostTxt}>+ Registrar entrega</Text>
-      </TouchableOpacity>
       <TouchableOpacity style={s.btnStop} onPress={onEnd} disabled={busy}>
         <Text style={s.btnStopTxt}>Encerrar expediente</Text>
       </TouchableOpacity>
@@ -196,7 +187,7 @@ function Stat({ label, value, unit, accent }: { label: string; value: string; un
   return (
     <View style={s.stat}>
       <Text style={s.statK}>{label}</Text>
-      <Text style={[s.statV, accent && { color: theme.orange }]}>
+      <Text style={[s.statV, accent && { color: theme.orange }]} numberOfLines={1}>
         {value}
         {unit ? <Text style={s.statU}> {unit}</Text> : null}
       </Text>
@@ -215,12 +206,10 @@ const s = StyleSheet.create({
   stats: { flexDirection: "row", flexWrap: "wrap", marginTop: 14, borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: theme.line },
   stat: { width: "50%", backgroundColor: theme.panel, padding: 16, borderWidth: 0.5, borderColor: theme.line },
   statK: { color: theme.muted, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
-  statV: { color: theme.paper, fontSize: 30, fontWeight: "900", marginTop: 4 },
+  statV: { color: theme.paper, fontSize: 26, fontWeight: "900", marginTop: 4 },
   statU: { color: theme.muted, fontSize: 14, fontWeight: "600" },
   btnRed: { backgroundColor: theme.red, borderRadius: 12, padding: 16, alignItems: "center" },
   btnRedTxt: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  btnGhost: { borderWidth: 2, borderColor: theme.line, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 16 },
-  btnGhostTxt: { color: theme.paper, fontWeight: "800" },
-  btnStop: { borderWidth: 2, borderColor: theme.red, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 10 },
+  btnStop: { borderWidth: 2, borderColor: theme.red, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 16 },
   btnStopTxt: { color: theme.red, fontWeight: "800" },
 });

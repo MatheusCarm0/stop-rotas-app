@@ -110,6 +110,17 @@ shiftsRouter.post("/:id/locations", requireAuth, async (req, res) => {
   );
 
   const last = pts[pts.length - 1];
+  const first = pts[0];
+  // Detecta movimento por DESLOCAMENTO real — o "speed" do GPS costuma vir 0/null.
+  let movingFlag: boolean;
+  const spanS = (new Date(last.recorded_at).getTime() - new Date(first.recorded_at).getTime()) / 1000;
+  if (pts.length >= 2 && spanS > 0) {
+    movingFlag = added / spanS > 0.4; // acima de ~1,4 km/h = andando
+  } else if (shift.last_lat != null && shift.last_lng != null) {
+    movingFlag = haversine(shift.last_lat, shift.last_lng, last.lat, last.lng) > 5;
+  } else {
+    movingFlag = added > 5;
+  }
   const duration = Math.max(
     0,
     Math.floor((Date.now() - new Date(shift.started_at).getTime()) / 1000)
@@ -119,7 +130,7 @@ shiftsRouter.post("/:id/locations", requireAuth, async (req, res) => {
      SET distance_m = distance_m + ?, last_lat=?, last_lng=?, last_seen_at=NOW(),
          moving=?, duration_s=?
      WHERE id=?`,
-    [added, last.lat, last.lng, last.moving ? 1 : 0, duration, id]
+    [added, last.lat, last.lng, movingFlag ? 1 : 0, duration, id]
   );
 
   const snap = await shiftSnapshot(id);
@@ -160,7 +171,8 @@ shiftsRouter.post("/:id/deliveries", requireAuth, async (req, res) => {
 // ---- Turnos ativos (admin) ----
 shiftsRouter.get("/active", requireAuth, requireAdmin, async (_req, res) => {
   const [rows] = await pool.query(
-    `SELECT s.*, e.name AS employee_name
+    `SELECT s.*, e.name AS employee_name,
+            TIMESTAMPDIFF(SECOND, s.last_seen_at, NOW()) AS since_seen
      FROM shifts s JOIN employees e ON e.id = s.employee_id
      WHERE s.status='active'
      ORDER BY s.started_at`

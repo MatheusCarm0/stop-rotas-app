@@ -17,7 +17,7 @@ export default function Login() {
     (async () => {
       const token = await getToken();
       const user = await getUser();
-      if (token && user) router.replace(user.role === "admin" ? "/admin" : "/worker");
+      if (token && user) router.replace(user.role === "admin" ? "/monitoramento" : "/worker");
       else setChecking(false);
     })();
   }, []);
@@ -27,7 +27,7 @@ export default function Login() {
     setLoading(true);
     try {
       const { user } = await api.login(username.trim(), password);
-      router.replace(user.role === "admin" ? "/admin" : "/worker");
+      router.replace(user.role === "admin" ? "/monitoramento" : "/worker");
     } catch (e: any) {
       setError(e.message || "Falha no login");
     } finally {

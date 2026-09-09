@@ -19,7 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: "Stop Rotas", headerShown: false }} />
         <Stack.Screen name="worker" options={{ title: "Expediente" }} />
         <Stack.Screen name="summary" options={{ title: "Comprovante" }} />
-        <Stack.Screen name="admin" options={{ title: "Painel · Stop Rotas" }} />
+        <Stack.Screen name="(admin)" options={{ headerShown: false }} />
       </Stack>
     </>
   );

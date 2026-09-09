@@ -38,4 +38,8 @@ export const api = {
   reportToday: () => request<any>("/reports/today"),
   reportMonthly: (months = 6) => request<any[]>(`/reports/monthly?months=${months}`),
   reportPerformance: () => request<any[]>("/reports/performance"),
+
+  listEmployees: () => request<any[]>("/employees"),
+  createEmployee: (body: { name: string; username: string; password: string; role: "admin" | "worker" }) =>
+    request<any>("/employees", { method: "POST", body: JSON.stringify(body) }),
 };
