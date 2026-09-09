@@ -2,9 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Instala dependências primeiro (melhor cache)
+# Instala dependências primeiro (melhor cache). Inclui devDeps porque
+# a app roda via tsx (TypeScript) em produção.
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev=false
+RUN npm install --include=dev
 
 # Copia o código
 COPY . .

@@ -3,17 +3,19 @@ import { readFileSync } from "node:fs";
 import { config } from "./config.js";
 import { seedUsers } from "./seedData.js";
 
-export const pool = mysql.createPool({
-  host: config.db.host,
-  port: config.db.port,
-  user: config.db.user,
-  password: config.db.password,
-  database: config.db.database,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  timezone: "Z",
-});
+export const pool = config.db.url
+  ? mysql.createPool(config.db.url)
+  : mysql.createPool({
+      host: config.db.host,
+      port: config.db.port,
+      user: config.db.user,
+      password: config.db.password,
+      database: config.db.database,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      timezone: "Z",
+    });
 
 /** Cria as tabelas a partir do schema.sql (idempotente — CREATE TABLE IF NOT EXISTS).
  *  Necessário em bancos gerenciados (Railway etc.), onde o init do container não roda. */

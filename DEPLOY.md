@@ -91,18 +91,19 @@ deploy — não precisa rodar nada manualmente.
 2. Isso cria um serviço **MySQL** com as variáveis de conexão prontas.
 
 ### 3) Ligar o backend ao banco (variáveis)
-No serviço do **backend → Variables**, adicione (usando *referências* ao serviço MySQL —
-troque `MySQL` pelo nome real do serviço, se for diferente):
+No serviço do **backend → Variables**, adicione só **duas** variáveis
+(troque `MySQL` pelo nome real do serviço de banco, se for diferente):
 
 ```
-DB_HOST=${{MySQL.MYSQLHOST}}
-DB_PORT=${{MySQL.MYSQLPORT}}
-DB_USER=${{MySQL.MYSQLUSER}}
-DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
-DB_NAME=${{MySQL.MYSQLDATABASE}}
+DB_URL=${{MySQL.MYSQL_URL}}
 JWT_SECRET=coloque-uma-frase-longa-e-aleatoria-aqui
 ```
+> `MYSQL_URL` é a string de conexão que o próprio serviço MySQL do Railway expõe.
 > Não defina `PORT` — o Railway injeta sozinho e o backend já usa essa porta.
+>
+> (Alternativa às 2 acima: `DB_HOST=${{MySQL.MYSQLHOST}}`, `DB_PORT=${{MySQL.MYSQLPORT}}`,
+> `DB_USER=${{MySQL.MYSQLUSER}}`, `DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}`,
+> `DB_NAME=${{MySQL.MYSQLDATABASE}}` + `JWT_SECRET`.)
 
 ### 4) Publicar e pegar a URL
 1. O deploy roda automático. Nos **Logs** você deve ver:
